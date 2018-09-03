@@ -1,14 +1,4 @@
-# skip-gram with negative sampling with subspace projection (SP-SGNS)
-
-Learn to embed words without any pre-set parameter value for the dimensionality of each vector. The only parameter
-is the dimension of the overall space, of which each embedded vector is a projection. 
-The dimension of each vector is a function of the norm of the classification error vector. Consequently, words
-which can be well classified given a context tend to have low number of dimensions in an embedded space of
-maximium number of dimensions (rest being 0s). Whereas words that are more ambiguous (e.g. polysemous or function words)
-tend to be embedded with higher number of dimensions.
-
-This also ensures that the embedding space can be stored in a more compact form with less storage space as compared
-to embedding spaces with fixed number of dimensions.
+# SP-SGNS
 
 ## Implementation
 
