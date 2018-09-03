@@ -14,7 +14,7 @@ to embedding spaces with fixed number of dimensions.
 
 An easy-to-use sample script is provided which is invoked as follows
 ``
-./semeval.sh i>min-size> <max-size (>min-size)> <context-size> <negative sampling size>>
+./semeval.sh <min-size> <max-size (> min-size)> <context-size> <negative sampling size>>
 ``
 e.g.
 ``
