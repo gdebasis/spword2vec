@@ -20,7 +20,11 @@
 #include <string.h>
 #include <math.h>
 
-#define MAXWORDLEN 50
+#define MAXWORDLEN 30
+#define LINE_BUFF_SIZE 65536
+#define MAX_VOCAB 500000
+
+int vecmode = 0;  // default bin mode... set to 1 for vec mode
 
 const int max_size = 2000;
 const long long N = 10;                  // number of closest words that will be shown
@@ -36,12 +40,22 @@ typedef struct WordPair {
 }
 WordPair;
 
+char lineBuff[LINE_BUFF_SIZE];
+
 int wordpair_compare_refsim(const void *a, const void *b) {
     return ((WordPair*)a)->refsim < ((WordPair*)b)->refsim? 1 : ((WordPair*)a)->refsim == ((WordPair*)b)->refsim? 0: -1 ;
 }
 
 int wordpair_compare_predsim(const void *a, const void *b) {
     return ((WordPair*)a)->sim < ((WordPair*)b)->sim? 1 : ((WordPair*)a)->sim == ((WordPair*)b)->sim? 0: -1 ;
+}
+
+int isVecFile(char* fname) {
+	int l = strlen(fname);
+	return
+		*(fname+l-1)=='c' && 
+		*(fname+l-2)=='e' && 
+		*(fname+l-3)=='v';
 }
 
 int main(int argc, char **argv) {
@@ -72,13 +86,17 @@ int main(int argc, char **argv) {
 		return 1;
 	}
 
+	vecmode = isVecFile(argv[1]);
+
   f = fopen(argv[1], "rb");
   if (f == NULL) {
-    printf("Input file not found\n");
+    printf("Input vec file not found\n");
     return -1;
   }
+
   fscanf(f, "%lld", &words);
   fscanf(f, "%d", &size);
+
   vocab = (char *)malloc((long long)words * max_w * sizeof(char));
   M = (float *)malloc((long long)words * size * sizeof(float));
   if (M == NULL) {
@@ -94,7 +112,10 @@ int main(int argc, char **argv) {
       if ((a < max_w) && (vocab[b * max_w + a] != '\n')) a++;
     }
     vocab[b * max_w + a] = 0;
-    for (a = 0; a < size; a++) fread(&M[a + b * size], sizeof(float), 1, f);
+    for (a = 0; a < size; a++) !vecmode?
+				fread(&M[a + b * size], sizeof(float), 1, f):
+				fscanf(f, "%f", &M[a + b * size]);
+
     len = 0;
     for (a = 0; a < size; a++) len += M[a + b * size] * M[a + b * size];
     len = sqrt(len);
@@ -104,7 +125,7 @@ int main(int argc, char **argv) {
 
   f = fopen(argv[2], "rb");
   if (f == NULL) {
-    fprintf(stderr, "Input file not found\n");
+    fprintf(stderr, "Input word-eval file not found\n");
     return -1;
   }
 
