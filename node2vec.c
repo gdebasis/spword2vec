@@ -13,6 +13,7 @@
 //  limitations under the License.
 
 #include <stdio.h>
+#include <assert.h>
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
@@ -20,11 +21,11 @@
 #define MAX_STRING 100
 #define EXP_TABLE_SIZE 1000
 #define MAX_EXP 6
-#define MAX_LINE_SIZE 100000
+#define MAX_LINE_SIZE 10000
 #define MAX_SENTENCE_LENGTH 1000
 #define MAX_CODE_LENGTH 40
 #define MAX_OUT_DEGREE 5000
-#define MAX_CONTEXT_PATH_LEN 20
+#define MAX_CONTEXT_PATH_LEN 40
 
 const int vocab_hash_size = 300000;  // Maximum 30 * 0.7 = 21M words in the vocabulary
 
@@ -33,13 +34,15 @@ typedef float real;                    // Precision of float numbers
 struct vocab_node;
 struct edge;
 
+typedef char byte;
+
 typedef struct edge {
 	struct vocab_node* dest;
 	real weight;
+	byte twohop;  // 1 if two-hop	
 }
 edge;
 
-typedef char byte;
 edge ***multiHopEdgeLists;
 
 // represents a node structure
@@ -58,7 +61,7 @@ vocab_node *vocab;
 int debug_mode = 2, window = 10, min_count = 0;
 int *vocab_hash;
 int vocab_max_size = 1000, vocab_size = 0, layer1_size = 100;
-int train_nodes = 0, iter = 5;
+int train_nodes = 0, iter = 5, gfmt = 2, directed = 1;
 real alpha = 0.025, sample = 1e-3;
 real *syn0, *syn1, *syn1neg, *expTable;
 int max_path_length = 2; // maximum path length of random walk... set this to either 1 or 2.
@@ -135,9 +138,9 @@ void ReadSrcNode(char *word, FILE *fin) {
   word[a] = 0;
 	// skip characters to put the file pointer to the start of next line
 	while (!feof(fin)) {
-                while ((ch = fgetc(fin)) != '\n');
-                break;
-         }
+  	while ((ch = fgetc(fin)) != '\n');
+    	break;
+  }
 }
 
 // Returns hash value of a word
@@ -225,7 +228,7 @@ int initContexts() {
 	if (multiHopEdgeLists == NULL) {
 		fprintf(stderr, "Unable to allocate memory to save the list of contexts.\n");
 	
-	return 0;
+		return 0;
 	}
 
 	for (i=0; i < vocab_size; i++) {
@@ -238,104 +241,198 @@ int initContexts() {
 	return 1;
 }
 
+int constructGraph_adjList(FILE* fp);
+int constructGraph_edgeList(FILE* fp);
 
 int constructGraph(FILE* fp) {
-	int i = 0, pos = 0, j = 0, src_node_index, node_index,count = 0;
+	if (gfmt == 1)
+		return constructGraph_adjList(fp);
+	return constructGraph_edgeList(fp);
+}
+
+int addEdge(char* src, char* dest, float wt) {
+		int src_node_index, dst_node_index, cn;
+		edge* edge_list;
+
+		// Get src node id
+		src_node_index = SearchVocab(src);
+
+		// Get dst node id
+		dst_node_index = SearchVocab(dest);
+		
+		// allocate edges
+
+		edge_list = vocab[src_node_index].edge_list;
+  	if (edge_list == NULL) {
+			edge_list = (edge*) malloc (sizeof(edge) * MAX_OUT_DEGREE);
+			cn = 0;
+		}
+		else {
+			cn = vocab[src_node_index].cn; // current number of edges
+		}
+
+		if (edge_list == NULL)
+			return 0;
+
+		if (cn == MAX_OUT_DEGREE) {
+			fprintf(stderr, "Can't add anymore edges...\n");
+			return 0;
+		}
+
+		edge_list[cn].dest = &vocab[dst_node_index]; 
+	 	edge_list[cn].dest->id = dst_node_index; 
+		edge_list[cn].weight = wt;
+
+		vocab[src_node_index].cn = cn+1; // number of edges
+		return 1;
+}
+
+// Each line represents an edge...
+// format is <src-node-id> \t <dest-node-id> \t <weight>
+// supports the option of directed/undirected...
+// for undirected option, the function adds the reverse edges
+int constructGraph_edgeList(FILE* fp) {
+	int i;
+	char *src_word, *dst_word, *wt_word;
+	float wt;
+
+	while (fgets(lineBuff, sizeof(lineBuff), fp)) {
+		i = 0;
+
+		src_word = lineBuff;
+		while (*(lineBuff + i) != '\t') { 
+			i++;
+		}
+  	*(lineBuff + i) = '\0';
+
+		i++; // skip the tab character
+
+		dst_word = lineBuff+i;
+		while (*(lineBuff + i) != '\t') { 
+			i++;
+		}
+
+  	*(lineBuff + i) = '\0';
+
+		i++; // skip the tab character
+		wt_word = lineBuff+i;
+		while (*(lineBuff + i) != '\n') { 
+			i++;
+		}
+  	*(lineBuff + i) = '\0';
+
+		wt = atof(wt_word);	
+
+		if (!addEdge(src_word, dst_word, wt)) return 0;  // add this edge to G
+		if (directed)
+			if (!addEdge(dst_word, src_word, wt)) return 0;  // add the reverse edge to G
+	}
+	return 1;
+}
+
+// for the adjacency list option, the program doesn't support
+// the directed/undirected option
+int constructGraph_adjList(FILE* fp) {
+	int i = 0, pos = 0, j = 0, src_node_index, node_index, count = 0;
 	edge* edge_list;
 	char *word;
-	while (fgets(lineBuff, 15000, fp)) {
+
+	while (fgets(lineBuff, sizeof(lineBuff), fp)) {
 		// allocate edges
 		edge_list = (edge*) malloc (sizeof(edge) * MAX_OUT_DEGREE);
 		if (edge_list == NULL)
 			return 0;
-		while (*(lineBuff + i) != '\t'){ 
-                       // printf("%c",lineBuff[i]);
+		while (*(lineBuff + i) != '\t') { 
 			i++;
 		}
-                *(lineBuff + i) = '\0';
+
+  	*(lineBuff + i) = '\0';
 		i++; // skip the tab character
                  
 		src_node_index = SearchVocab(lineBuff);
-        	if (src_node_index < 0)
-		{
-                        i = 0;
+ 		if (src_node_index < 0) {
+  		i = 0;
 			continue;
-                }
+  	}
 		word = strtok(lineBuff+i, " ");
-                j = 0;
-                while(word != NULL){
-                       pos = 0;
+  	j = 0;
+  	while (word != NULL) {
+  		pos = 0;
 			count = count +1;	
 			while (*(word + pos) != ':') pos++; 
 			*(word + pos) = 0;
-			/*edge_list[j].dest = (vocab_node *)calloc(1, sizeof(vocab_node));	
-                        //edge_list[j].dest->edge_list = (edge*) calloc (MAX_OUT_DEGREE,sizeof(edge) );
-                        //edge_list[j].dest->edge_list->dest = (vocab_node *)calloc(1, sizeof(vocab_node));
-                        edge_list[j].dest->word = word;
-                         node_index = SearchVocab(word);  
-		        //printf("%daaa\n", node_index);	
-			edge_list[j].dest->id = node_index; 
-			edge_list[j].weight = atof(word+pos+1); j++; */
-                        node_index = SearchVocab(word);
-                        if(node_index > 0)
-                        {
+
+	    node_index = SearchVocab(word);
+  	  if (node_index > 0) {
 				edge_list[j].dest=&vocab[node_index]; 
-		                 edge_list[j].dest->id = node_index; 
-				edge_list[j].weight = atof(word+pos+1)/1991260.0;	
-				//printf("%s zzz \n ", edge_list[j].dest->word);	
+	    	edge_list[j].dest->id = node_index; 
+				edge_list[j].weight = atof(word+pos+1);	
 				j++; 
 			}
-                      word = strtok(NULL, " ");
-                      if(strcmp(word, "\n") == 0)
-                        {
-			i = 0;
-                         break;
+    	word = strtok(NULL, " ");
+    	if (strcmp(word, "\n") == 0) {
+				i = 0;
+      	break;
 			}
-                 }
-                vocab[src_node_index].edge_list = edge_list;
+		}
+  	vocab[src_node_index].edge_list = edge_list;
 		vocab[src_node_index].cn = j; // number of edges
-                i = 0;
-                
+  	i = 0;
 	}
 
 	return 1;  
 }
 
+// an important step is to normalize the edge weights to probabilties
+// of samples that would be used later on during sampling nodes
+// from this pre-built context.
 void preComputePathContextForSrcNode(int src_node_index) {
 	int i = 0, j;  // index into the context buffer
 	edge *p, *q;
 	edge **multiHopEdgeList;
 	vocab_node *src_node;
+	real z = 0;
+	static const real onehop_pref = 0.7;
+	static const real one_minus_onehop_pref = 1 - onehop_pref;
 
 	src_node = &vocab[src_node_index];
 	multiHopEdgeList = multiHopEdgeLists[src_node_index]; // write to the correct buffer
-  	p = src_node->edge_list;
+	p = src_node->edge_list;
 
-  	// collect a set of 2 hop nodes from this source node 
+ 	// collect a set of 2 hop nodes from this source node 
 	for (p = src_node->edge_list; p < &src_node->edge_list[src_node->cn]; p++) {
 
-    		// visit a one-hop node from source
+		// visit a one-hop node from source
 		if (!p->dest->visited && i < MAX_CONTEXT_PATH_LEN) {
-    			multiHopEdgeList[i++] = p;
+   		multiHopEdgeList[i++] = p;
+			p->twohop = 0;
 			p->dest->visited = 1;
 		}
 
 		// for each visited one-hop node, visit its one-hop neighbors
 		for (q = p->dest->edge_list; q < &p->dest->edge_list[p->dest->cn]; q++) {
-                   	// visit a one-hop node from source
-                   	if (!q->dest->visited && i < MAX_CONTEXT_PATH_LEN) {
+    	// visit a one-hop node from source
+      if (!q->dest->visited && i < MAX_CONTEXT_PATH_LEN) {
 				multiHopEdgeList[i++] = q;
+				q->twohop = 1;
 				q->dest->visited = 1;
-		    	}
+	   	}
 		}
 	}
 	multiHopEdgeList[i] = NULL;
 
+	z = 0;
 	// reset the visited flags (for next call to the function)
 	for (j = 0; j < i; j++) {
+		multiHopEdgeList[j]->weight *= multiHopEdgeList[j]->twohop? one_minus_onehop_pref : onehop_pref;  // prob of one-hop vs two-hop
 		multiHopEdgeList[j]->dest->visited = 0;
+		z += multiHopEdgeList[j]->weight;
 	}
- }
+
+	for (j = 0; j < i; j++) {
+		multiHopEdgeList[j]->weight /= z;
+	}
+}
 
 // Precompute the set of max-hop nodes for each source node.
 int preComputePathContexts() {
@@ -346,7 +443,7 @@ int preComputePathContexts() {
 
 	for (i=0; i < vocab_size; i++) {
 		preComputePathContextForSrcNode(i);
-        }	
+	}	
 	return 1;
 }
 
@@ -355,9 +452,9 @@ int preComputePathContexts() {
 int sampleContext(int src_node_index, unsigned long next_random, edge** contextBuff) {
 	edge **multiHopEdgeList;
 	edge **p, *tmp;
-	int len = MAX_CONTEXT_PATH_LEN, i, j = 0,len_dup,count,count1,flag;
+	int len = MAX_CONTEXT_PATH_LEN, i, j = 0, orig_len;
 	real x, cumul_p;
-        vocab_node src_node;	
+  vocab_node src_node;	
 	src_node = vocab[src_node_index];
 	// see how many 2-hop adj neighbors we have got for this node 
 
@@ -368,49 +465,49 @@ int sampleContext(int src_node_index, unsigned long next_random, edge** contextB
 	}
 	len = p - multiHopEdgeList;
 	
-        printf("Length %d ",len);
 	len = window < len? window: len;
-	len_dup = len; 	
-	printf("Original Word %s: ",src_node.word);	
-	for (i=0; i < len; i++)
-		contextBuff[i] = NULL; // re-init context buff
-        count = 0;	
-        len_dup = len;		
-	for (i=0; i < len_dup; i++) {  // ith sample
-		//printf("%s \t", multiHopEdgeList[i]->dest->word);	
+	orig_len = len;
+
+	if (debug_mode > 2)
+		printf("Original Word %s: ", src_node.word);
+
+	memset(contextBuff, 0, sizeof(edge*)*len);
+
+	// normalize the weights so that they sum to 1.
+	cumul_p = 0;
+	for (p = multiHopEdgeList; p < &multiHopEdgeList[len]; p++) {
+		cumul_p += (*p)->weight;
+	}
+
+	// divide by Z (norm constant)
+	for (p = multiHopEdgeList; p < &multiHopEdgeList[len]; p++) {
+		(*p)->weight = (*p)->weight / cumul_p;
+	}
+	
+	for (i=0; i < len; i++) {  // ith sample
 		cumul_p = 0;
-		next_random = next_random * (unsigned long)25214903917 + 11;
+  	next_random = next_random * (unsigned long)25214903917 + 11;
 		x = ((next_random & 0xFFFF) / (real)65536);  // [0, 1]
-	        count1 = 0; flag = 0;	
+
 		// Find out in which interval does this belong to...
-	        	for (p = &multiHopEdgeList[0]; p < &multiHopEdgeList[len]; p++) {
+		for (p = multiHopEdgeList; p < &multiHopEdgeList[len]; p++) {
 			if (cumul_p <= x && x < cumul_p + (*p)->weight)
-			{ flag = 1; 		break;}
+				break;	
+
 			cumul_p += (*p)->weight;
-			count1++;	
-			}
+		}
 
 		// save sampled nodes in context
-		//contextBuff[j++] =multiHopEdgeList[count++] ;
+		contextBuff[j++] = *p;
+
 		// swap the selected element with the last and decrease array size --> no duplicate samples
-		tmp = multiHopEdgeList[len-1];
-	           if(flag == 1){
-	                contextBuff[j++] = multiHopEdgeList[count1]; 
-		        printf("%s\t",contextBuff[j-1]->dest->word);
-			multiHopEdgeList[len -1] = multiHopEdgeList[count1];		
-			multiHopEdgeList[count1]= tmp;
-		   }else{
-		        contextBuff[j++] = multiHopEdgeList[count1-1]; 
-		         printf("%s\t",contextBuff[j-1]->dest->word);
-			multiHopEdgeList[len -1]= multiHopEdgeList[count1-1];
-			multiHopEdgeList[count1 - 1] = tmp;
-	           }	
-		/*multiHopEdgeList[len] = *p;
-		p = &tmp;*/
+		tmp = multiHopEdgeList[len];
+		multiHopEdgeList[len] = *p;
+		*p = tmp;
 		len--;
 	}
-        printf("\nEnd of One loop \n");	
-	return len_dup;
+
+	return orig_len;
 }
 
 // Each line in this graph file is of the following format:
@@ -445,10 +542,9 @@ int LearnVocabFromTrainFile() {
     printf("#nodes: %d\n", vocab_size);
   }
   fin = fopen(train_file, "rb");
-  printf("\n here in construct graph");
    if (!constructGraph(fin))
 		return 0; 
- fclose(fin);
+	fclose(fin);
 
 	if (!preComputePathContexts())
 		return 0;
@@ -530,44 +626,47 @@ void skipgram() {
   unsigned long next_random = 123456;
   real f, g;
   real *neu1e = (real *)calloc(layer1_size, sizeof(real));
-  for (word=0; word < vocab_size; word++) {
-	context_len = sampleContext(word, next_random, contextBuff);  
-	// train skip-gram on node contexts
-    	for (a = 0; a < context_len ; a++){ 
-		p = contextBuff[a];
-        	last_word = p->dest->id;
-		l1 = last_word * layer1_size;
-		memset(neu1e, 0, layer1_size * sizeof(real));
-        	
-		// NEGATIVE SAMPLING
-        	if (negative > 0) for (d = 0; d < negative + 1; d++) {
-        		if (d == 0) {
-          			target = word;
-          			label = 1;
-        		} else {
-          			next_random = next_random * (unsigned long)25214903917 + 11;
-          			target = table[(next_random >> 16) % table_size];
-          			if (target == 0) target = next_random % (vocab_size - 1) + 1;
-          			if (target == word) continue;
-          			label = 0;
-        		}
-        		l2 = target * layer1_size;
-        		f = 0;
-        		for (c = 0; c < layer1_size; c++) f += syn0[c + l1] * syn1neg[c + l2];
-				// compute gradient
-        			if (f > MAX_EXP) g = (label - 1) * alpha;
-        			else if (f < -MAX_EXP) g = (label - 0) * alpha;
-        			else g = (label - expTable[(int)((f + MAX_EXP) * (EXP_TABLE_SIZE / MAX_EXP / 2))]) * alpha;
 
-       			for (c = 0; c < layer1_size; c++) neu1e[c] += g * syn1neg[c + l2];
-       			for (c = 0; c < layer1_size; c++) syn1neg[c + l2] += g * syn0[c + l1];
-		}	
-		// Learn weights input -> hidden
-      		for (c = 0; c < layer1_size; c++) syn0[c + l1] += neu1e[c]; 
-	} 
+	for (word=0; word < vocab_size; word++) {
+		context_len = sampleContext(word, next_random, contextBuff);  
+
+		// train skip-gram on node contexts
+ 		for (a = 0; a < context_len; a++) { 
+			p = contextBuff[a];
+   		last_word = p->dest->id;
+			l1 = last_word * layer1_size;
+			memset(neu1e, 0, layer1_size * sizeof(real));
+        	
+			// NEGATIVE SAMPLING
+   		if (negative > 0) for (d = 0; d < negative + 1; d++) {
+	 			if (d == 0) {
+ 					target = word;
+   				label = 1;
+   			} else {
+ 					next_random = next_random * (unsigned long)25214903917 + 11;
+					target = table[(next_random >> 16) % table_size];
+       		if (target == 0) target = next_random % (vocab_size - 1) + 1;
+       		if (target == word) continue;
+         	label = 0;
+       	}
+       	l2 = target * layer1_size;
+       	f = 0;
+       	for (c = 0; c < layer1_size; c++) f += syn0[c + l1] * syn1neg[c + l2];
+				// compute gradient
+       	if (f > MAX_EXP) g = (label - 1) * alpha;
+       	else if (f < -MAX_EXP) g = (label - 0) * alpha;
+       	else g = (label - expTable[(int)((f + MAX_EXP) * (EXP_TABLE_SIZE / MAX_EXP / 2))]) * alpha;
+
+     		for (c = 0; c < layer1_size; c++) neu1e[c] += g * syn1neg[c + l2];
+     		for (c = 0; c < layer1_size; c++) syn1neg[c + l2] += g * syn0[c + l1];
+			}
+	
+			// Learn weights input -> hidden
+   		for (c = 0; c < layer1_size; c++) syn0[c + l1] += neu1e[c]; 
+		} 
   }
 
-  free(neu1e);
+	free(neu1e);
 }
 
 void train() {
@@ -603,9 +702,8 @@ void train() {
     fprintf(fo2, "\n");
   }
 
-fclose(fo);
+	fclose(fo);
   fclose(fo2);
-  printf("complete here");
 }
 
 int ArgPos(char *str, int argc, char **argv) {
@@ -627,6 +725,8 @@ int main(int argc, char **argv) {
     printf("Options:\n");
     printf("Parameters for training:\n");
     printf("\t-train <file>\n");
+    printf("Graph format -- {adj=1,edge=2} (default:2) :\n");
+    printf("\t-gfmt <format code>\n");
     printf("\t\tGraph file (each line a node: <node-id> \t [<node-id>:<weight>]*)\n");
     printf("\t-pt <file>\n");
     printf("\t\tPre-trained vectors for nodes (word2vec bin file format)\n");
@@ -644,8 +744,11 @@ int main(int argc, char **argv) {
     printf("\t\tNodes with out-degree less than min-count are discarded; default is 5\n");
     printf("\t-alpha <float>\n");
     printf("\t\tSet the starting learning rate; default is 0.025 for skip-gram\n");
-    printf("\nExamples:\n");
-    printf("./node2vec -pt <pre-trained node vectors (word2vec bin formatted file)> -train graph.txt -output vec.txt -size 200 -window 5 -sample 1e-4 -negative 5 -iter 3\n\n");
+    printf("\t-directed <0/1>\n");
+    printf("\t\twhether the graph is directed (if undirected, reverse edges are automatically added when the i/p fmt is edge list>\n");
+    printf("\nExample:\n");
+    printf("./node2vec -pt nodes.bin -train graph.txt -gfmt 2 -output ovec -size 200 -window 5 -sample 1e-4 -negative 5 -iter 3\n\n");
+
     return 0;
   }
   output_file[0] = 0;
@@ -654,6 +757,8 @@ int main(int argc, char **argv) {
   if ((i = ArgPos((char *)"-train", argc, argv)) > 0) strcpy(train_file, argv[i + 1]);
   if ((i = ArgPos((char *)"-alpha", argc, argv)) > 0) alpha = atof(argv[i + 1]);
   if ((i = ArgPos((char *)"-output", argc, argv)) > 0) strcpy(output_file, argv[i + 1]);
+  if ((i = ArgPos((char *)"-gfmt", argc, argv)) > 0) gfmt = atoi(argv[i + 1]);
+  if ((i = ArgPos((char *)"-directed", argc, argv)) > 0) directed = atoi(argv[i + 1]);
   if ((i = ArgPos((char *)"-pt", argc, argv)) > 0) strcpy(pretrained_file, argv[i + 1]);
   if ((i = ArgPos((char *)"-window", argc, argv)) > 0) window = atoi(argv[i + 1]);
   if ((i = ArgPos((char *)"-sample", argc, argv)) > 0) sample = atof(argv[i + 1]);
