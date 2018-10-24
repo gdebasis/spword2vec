@@ -256,12 +256,19 @@ int addEdge(char* src, char* dest, float wt) {
 
 		// Get src node id
 		src_node_index = SearchVocab(src);
+		if (src_node_index == -1) {
+			printf("Word '%s' OOV...\n", src);
+			return 0;
+		}
 
 		// Get dst node id
 		dst_node_index = SearchVocab(dest);
-		
-		// allocate edges
+		if (dst_node_index == -1) {
+			printf("Word '%s' OOV...\n", dest);
+			return 0;
+		}
 
+		// allocate edges
 		edge_list = vocab[src_node_index].edge_list;
   	if (edge_list == NULL) {
 			edge_list = (edge*) malloc (sizeof(edge) * MAX_OUT_DEGREE);
@@ -282,6 +289,7 @@ int addEdge(char* src, char* dest, float wt) {
 		edge_list[cn].dest = &vocab[dst_node_index]; 
 	 	edge_list[cn].dest->id = dst_node_index; 
 		edge_list[cn].weight = wt;
+		vocab[src_node_index].edge_list = edge_list;
 
 		vocab[src_node_index].cn = cn+1; // number of edges
 		return 1;
@@ -292,10 +300,11 @@ int addEdge(char* src, char* dest, float wt) {
 // supports the option of directed/undirected...
 // for undirected option, the function adds the reverse edges
 int constructGraph_edgeList(FILE* fp) {
-	int i;
+	int i, count = 0;
 	char *src_word, *dst_word, *wt_word;
 	float wt;
 
+	printf("Reading edges from each line...\n");
 	while (fgets(lineBuff, sizeof(lineBuff), fp)) {
 		i = 0;
 
@@ -323,9 +332,14 @@ int constructGraph_edgeList(FILE* fp) {
 
 		wt = atof(wt_word);	
 
-		if (!addEdge(src_word, dst_word, wt)) return 0;  // add this edge to G
+		if (!addEdge(src_word, dst_word, wt))
+			continue;  // add this edge to G
+
 		if (directed)
-			if (!addEdge(dst_word, src_word, wt)) return 0;  // add the reverse edge to G
+			addEdge(dst_word, src_word, wt);
+
+		count++;
+		printf("Read line %d\n", count); 
 	}
 	return 1;
 }
@@ -364,7 +378,7 @@ int constructGraph_adjList(FILE* fp) {
 
 	    node_index = SearchVocab(word);
   	  if (node_index > 0) {
-				edge_list[j].dest=&vocab[node_index]; 
+				edge_list[j].dest = &vocab[node_index]; 
 	    	edge_list[j].dest->id = node_index; 
 				edge_list[j].weight = atof(word+pos+1);	
 				j++; 
@@ -392,8 +406,8 @@ void preComputePathContextForSrcNode(int src_node_index) {
 	edge **multiHopEdgeList;
 	vocab_node *src_node;
 	real z = 0;
-	static const real onehop_pref = 0.7;
-	static const real one_minus_onehop_pref = 1 - onehop_pref;
+	static real onehop_pref = 0.7;
+	static real one_minus_onehop_pref = 0.3;
 
 	src_node = &vocab[src_node_index];
 	multiHopEdgeList = multiHopEdgeLists[src_node_index]; // write to the correct buffer
@@ -441,8 +455,11 @@ int preComputePathContexts() {
 	if (!initContexts())
 		return 0;
 
+	printf("Initialized contexts...\n");
+
 	for (i=0; i < vocab_size; i++) {
 		preComputePathContextForSrcNode(i);
+		printf("Precomputed contexts for node %d (%s)\n", i, vocab[i].word);
 	}	
 	return 1;
 }
@@ -451,8 +468,8 @@ int preComputePathContexts() {
 // contextBuff is an o/p parameter
 int sampleContext(int src_node_index, unsigned long next_random, edge** contextBuff) {
 	edge **multiHopEdgeList;
-	edge **p, *tmp;
-	int len = MAX_CONTEXT_PATH_LEN, i, j = 0, orig_len;
+	edge **p;
+	int len = MAX_CONTEXT_PATH_LEN, i, j = 0;
 	real x, cumul_p;
   vocab_node src_node;	
 	src_node = vocab[src_node_index];
@@ -466,10 +483,6 @@ int sampleContext(int src_node_index, unsigned long next_random, edge** contextB
 	len = p - multiHopEdgeList;
 	
 	len = window < len? window: len;
-	orig_len = len;
-
-	if (debug_mode > 2)
-		printf("Original Word %s: ", src_node.word);
 
 	memset(contextBuff, 0, sizeof(edge*)*len);
 
@@ -484,7 +497,7 @@ int sampleContext(int src_node_index, unsigned long next_random, edge** contextB
 		(*p)->weight = (*p)->weight / cumul_p;
 	}
 	
-	for (i=0; i < len; i++) {  // ith sample
+	for (i=0; i < window; i++) {  // ith sample
 		cumul_p = 0;
   	next_random = next_random * (unsigned long)25214903917 + 11;
 		x = ((next_random & 0xFFFF) / (real)65536);  // [0, 1]
@@ -499,15 +512,9 @@ int sampleContext(int src_node_index, unsigned long next_random, edge** contextB
 
 		// save sampled nodes in context
 		contextBuff[j++] = *p;
-
-		// swap the selected element with the last and decrease array size --> no duplicate samples
-		tmp = multiHopEdgeList[len];
-		multiHopEdgeList[len] = *p;
-		*p = tmp;
-		len--;
 	}
 
-	return orig_len;
+	return j;
 }
 
 // Each line in this graph file is of the following format:
@@ -517,7 +524,9 @@ int LearnVocabFromTrainFile() {
   FILE *fin;
   int a, i;
 
-	printf("Loading nodes from graph file...\n");	
+	if (debug_mode > 2)
+		printf("Loading nodes from graph file...\n");	
+
   printf("%d\n", vocab_hash_size);
   for (a = 0; a < vocab_hash_size; a++) vocab_hash[a] = -1;
   fin = fopen(train_file, "rb");
@@ -538,16 +547,21 @@ int LearnVocabFromTrainFile() {
     } else vocab[i].cn++;
   }
   SortVocab();
-  if (debug_mode > 0) {
+  if (debug_mode > 2) {
     printf("#nodes: %d\n", vocab_size);
   }
   fin = fopen(train_file, "rb");
    if (!constructGraph(fin))
 		return 0; 
 	fclose(fin);
+	
+	if (debug_mode > 2)
+		printf("Loaded graph in memory...\n");
 
 	if (!preComputePathContexts())
 		return 0;
+	if (debug_mode > 2)
+		printf("Successfully initialized path contexts\n");
 	return 1;
 }
 
@@ -628,11 +642,18 @@ void skipgram() {
   real *neu1e = (real *)calloc(layer1_size, sizeof(real));
 
 	for (word=0; word < vocab_size; word++) {
+		if (debug_mode > 2)
+			printf("Skip-gram iteration for source word %s\n", vocab[word].word);
+
 		context_len = sampleContext(word, next_random, contextBuff);  
 
 		// train skip-gram on node contexts
  		for (a = 0; a < context_len; a++) { 
 			p = contextBuff[a];
+			if (p==NULL || p->dest==NULL) {
+				continue;
+			}
+
    		last_word = p->dest->id;
 			l1 = last_word * layer1_size;
 			memset(neu1e, 0, layer1_size * sizeof(real));
@@ -663,8 +684,11 @@ void skipgram() {
 	
 			// Learn weights input -> hidden
    		for (c = 0; c < layer1_size; c++) syn0[c + l1] += neu1e[c]; 
+
 		} 
   }
+	if (debug_mode > 2)
+		printf("Skipgram training done...\n");
 
 	free(neu1e);
 }
@@ -754,6 +778,7 @@ int main(int argc, char **argv) {
   output_file[0] = 0;
 	pretrained_file[0] = 0;
   if ((i = ArgPos((char *)"-size", argc, argv)) > 0) layer1_size = atoi(argv[i + 1]);
+  if ((i = ArgPos((char *)"-trace", argc, argv)) > 0) debug_mode = atoi(argv[i + 1]);
   if ((i = ArgPos((char *)"-train", argc, argv)) > 0) strcpy(train_file, argv[i + 1]);
   if ((i = ArgPos((char *)"-alpha", argc, argv)) > 0) alpha = atof(argv[i + 1]);
   if ((i = ArgPos((char *)"-output", argc, argv)) > 0) strcpy(output_file, argv[i + 1]);
