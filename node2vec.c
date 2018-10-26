@@ -684,8 +684,8 @@ int train() {
   fo2 = fopen(output_file_vec, "wb");
 
   // Save the word vectors
-  fprintf(fo, "%d %d\n", vocab_size, layer1_size);
-  fprintf(fo2, "%d %d\n", vocab_size, layer1_size);
+  fprintf(fo, "%lld %lld\n", (long long)(vocab_size + pt_vocab_words), (long long)layer1_size);
+  fprintf(fo2, "%lld %lld\n", (long long)(vocab_size + pt_vocab_words), (long long)layer1_size);
   for (a = 0; a < vocab_size; a++) {
     fprintf(fo, "%s ", vocab[a].word);
     fprintf(fo2, "%s ", vocab[a].word);
