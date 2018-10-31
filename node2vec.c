@@ -661,7 +661,7 @@ void skipgram() {
 
 int train() {
   long a;
-	int b;
+	int b, i;
   FILE *fo, *fo2;
   printf("Starting training using file %s\n", train_file);
   if (!LearnVocabFromTrainFile()) {
@@ -675,7 +675,8 @@ int train() {
   if (negative > 0) InitUnigramTable();
 	printf("Unigram table initialized...\n");
 
-	skipgram();
+	for (i=0; i < iter; i++) 
+		skipgram();
 
   snprintf(output_file_vec, sizeof(output_file_vec), "%s.vec", output_file); 
   snprintf(output_file_bin, sizeof(output_file_bin), "%s.bin", output_file); 
