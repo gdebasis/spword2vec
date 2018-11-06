@@ -73,6 +73,9 @@ int *table;
 char* pt_word_buff;
 long pt_vocab_words = 0;
 
+int SearchVocab(char *word);
+int AddWordToVocab(char *word);
+
 void InitUnigramTable() {
   int a, i;
   int train_nodes_pow = 0;
@@ -115,35 +118,26 @@ void ReadWord(char *word, FILE *fin) {
 }
 
 // Reads the node id from a file... stops reading when it sees a tab character.
-// Each line in the graph file is: <src node>\t[<dest-node>:<weight>]*
-void ReadSrcNode(char *word, FILE *fin) {
-  int a = 0, ch;
-  while (!feof(fin)) {
-    ch = fgetc(fin);
-    if (ch == '\t')
-    {
-	    break;
-    }
-    if ((ch == ' ') || (ch == '\t') || (ch == '\n')) {
-      if (a > 0) {
-        if (ch == '\n') ungetc(ch, fin);
-        break;
-      }
-      if (ch == '\n') {
-        strcpy(word, (char *)"</s>");
-        return;
-      } else continue;
-    }
-    word[a] = ch;
-    a++;
-    if (a >= MAX_STRING - 1) a--;   // Truncate too long words
+// Each line in the graph file is: <src node>\t<dest-node>\t<weight>
+void ReadSrcNode(FILE *fin) {
+  char node_id1[MAX_STRING], node_id2[MAX_STRING];
+	float f;
+	int a, i;
+
+	fscanf(fin, "%s %s %f\n", node_id1, node_id2, &f);   
+  i = SearchVocab(node_id1);
+  if (i == -1) {
+	  a = AddWordToVocab(node_id1);
+  	vocab[a].cn = 1;
   }
-  word[a] = 0;
-	// skip characters to put the file pointer to the start of next line
-	while (!feof(fin)) {
-  	while ((ch = fgetc(fin)) != '\n');
-    	break;
+	else vocab[i].cn++;
+ 
+  i = SearchVocab(node_id2);
+  if (i == -1) {
+	  a = AddWordToVocab(node_id2);
+  	vocab[a].cn = 1;
   }
+	else vocab[i].cn++;
 }
 
 // Returns hash value of a word
@@ -409,8 +403,7 @@ int sampleContext(int src_node_index, unsigned long next_random, edge** contextB
 	edge **p;
 	int len = MAX_CONTEXT_PATH_LEN, i, j = 0;
 	real x, cumul_p, z, norm_wt;
-  vocab_node src_node;	
-	src_node = vocab[src_node_index];
+
 	// see how many 2-hop adj neighbors we have got for this node 
 
 	multiHopEdgeList = multiHopEdgeLists[src_node_index]; // buffer to sample from
@@ -464,9 +457,8 @@ int sampleContext(int src_node_index, unsigned long next_random, edge** contextB
 // Each line in this graph file is of the following format:
 // <src-node-id>\t [<dest-node-id>:<weight of this edge> ]* 
 int LearnVocabFromTrainFile() {
-  char src_node_id[MAX_STRING];
   FILE *fin;
-  int a, i;
+  int a;
 
 	if (debug_mode > 2)
 		printf("Loading nodes from graph file...\n");	
@@ -479,17 +471,12 @@ int LearnVocabFromTrainFile() {
     exit(1);
   }
   vocab_size = 0;
-  
-	while (1) {
-    ReadSrcNode(src_node_id, fin);
-    if (feof(fin)) break;
-    train_nodes++;
-    i = SearchVocab(src_node_id);
-    if (i == -1) {
-      a = AddWordToVocab(src_node_id);
-      vocab[a].cn = 1;
-    } else vocab[i].cn++;
+ 
+	do {
+    ReadSrcNode(fin);
   }
+	while (!feof(fin));
+
   SortVocab();
   if (debug_mode > 2) {
     printf("#nodes: %d\n", vocab_size);
