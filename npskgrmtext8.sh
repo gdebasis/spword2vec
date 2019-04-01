@@ -1,19 +1,20 @@
 #!/bin/bash
 
-if [ $# -lt 7 ]
+if [ $# -lt 8 ]
 then
-        echo "Usage: $0 <min-size> <max-size> <events (iter/rdim/cf)> (bbb) (b:=0/1) <wsize> <ns>"
+        echo "Usage: $0 <min-size> <max-size> <events (error/iter/rdim/cf)> (bbbb) (b:=0/1) <wsize> <ns>"
         exit
 fi
 
 MINSIZE=$1
 SIZE=$2
-ITER=$3
-DIM=$4
-CF=$5
-WSIZE=$6
-NS=$7
-ALL=$1.$2.$3.$4.$5.$6.$7
+ERROR_EVENT=$3
+ITER=$4
+DIM=$5
+CF=$6
+WSIZE=$7
+NS=$8
+ALL=$1.$2.$3.$4.$5.$6.$7.$8
 
 OUTFILE=wvecs/swvecs.$ALL
 
@@ -22,7 +23,7 @@ REF_DATA_MEN=datasets/men/MEN_dataset_natural_form_full
 
 if [ ! -e $OUTFILE.bin ]
 then
-	./word2svec -train text8/text8 -output $OUTFILE -minsize $MINSIZE -cbow 0 -dropout 1 -size $SIZE -window $WSIZE -negative $NS -hs 0 -sample 1e-4 -threads 4 -iter 3 -iter-event $ITER -rdim-event $DIM -cf-event $CF
+	./word2svec -train text8/text8 -output $OUTFILE -minsize $MINSIZE -cbow 0 -dropout 1 -size $SIZE -window $WSIZE -negative $NS -hs 0 -sample 1e-4 -threads 4 -iter 3 -error-event $ERROR_EVENT -iter-event $ITER -rdim-event $DIM -cf-event $CF
 	echo
 fi
 
@@ -71,4 +72,6 @@ echo "$MINSIZE $SIZE $WSIZE $NS $cratio $avgdim $rho_1 $ceil_rho_1 $max_rho_1 $r
 
 rm tmp
 rm stats
+
+cat res
 
