@@ -58,6 +58,7 @@ real alpha = 0.025, starting_alpha, sample = 1e-3;
 real *syn0, *syn1, *syn1neg, *expTable, *iterTable;
 int iter_event = 1, remaining_dim_event = 1, freq_event = 1;
 clock_t start;
+int useErrorNormToGrowDimension = 1;
 
 int hs = 0, negative = 5, dropout = 0;
 const int table_size = 1e8;
@@ -82,7 +83,7 @@ real errorNorm(real* neu1e) {
 // 3. iteration number --- starts at 1.
 int growDimension(real* neu1e, long long wordid, unsigned long long next_random, int iter) {
 	int layer_index;
-	int del_dim;
+	int del_dim = 0;
 	real neu1e_norm, dropoutSample;
 	real p, q, r;   // events corresponding to remaining dimensions, iterations and relative freq respectively.
 
@@ -97,41 +98,39 @@ int growDimension(real* neu1e, long long wordid, unsigned long long next_random,
 	next_random = next_random * (unsigned long long)25214903917 + 11;
 	dropoutSample = (next_random & 0xFFFF) / (real)65536; // a random number in [0, 1]
 
-	if (dropoutSample < neu1e_norm) {   // prob of increasing dimensions = neu1e_norm prob 
-
+	if (useErrorNormToGrowDimension && dropoutSample < neu1e_norm)   // prob of increasing dimensions = neu1e_norm prob 
 		del_dim = 1;
 
-		// Additional events
-		next_random = next_random * (unsigned long long)25214903917 + 11;
-		p = (next_random & 0xFFFF) / (real)65536; // a random number in [0, 1]
+	// Additional events
+	next_random = next_random * (unsigned long long)25214903917 + 11;
+	p = (next_random & 0xFFFF) / (real)65536; // a random number in [0, 1]
 
-		next_random = next_random * (unsigned long long)25214903917 + 11;
-		q = (next_random & 0xFFFF) / (real)65536; // a random number in [0, 1]
+	next_random = next_random * (unsigned long long)25214903917 + 11;
+	q = (next_random & 0xFFFF) / (real)65536; // a random number in [0, 1]
 
-		next_random = next_random * (unsigned long long)25214903917 + 11;
-		r = (next_random & 0xFFFF) / (real)65536; // a random number in [0, 1]
+	next_random = next_random * (unsigned long long)25214903917 + 11;
+	r = (next_random & 0xFFFF) / (real)65536; // a random number in [0, 1]
 
-  	// p(del_dim=1) decreases with increasing dimension and decreases with iter and decreases with increasing relative coll freq
+ 	// p(del_dim=1) decreases with increasing dimension and decreases with iter and decreases with increasing relative coll freq
 
-		if (remaining_dim_event)
-			del_dim = p < (layer1_size - vocab[wordid].dim)/(real)layer1_size? 1 : 0;
-		if (iter_event)
-			del_dim = q < iterTable[iter]? 1 : 0;
-		if (freq_event)
-			del_dim = r >= vocab[wordid].cn/(real)train_words? 1 : 0;  // higher the count, lower is the prob of increase
+	if (remaining_dim_event)
+		del_dim = p < (layer1_size - vocab[wordid].dim)/(real)layer1_size? 1 : 0;
+	if (iter_event)
+		del_dim = q < iterTable[iter]? 1 : 0;
+	if (freq_event)
+		del_dim = r >= vocab[wordid].cn/(real)train_words? 1 : 0;  // higher the count, lower is the prob of increase
 
-		vocab[wordid].dim += del_dim;
-		if (vocab[wordid].dim > layer1_size)
-			vocab[wordid].dim = layer1_size;
+	vocab[wordid].dim += del_dim;
+	if (vocab[wordid].dim > layer1_size)
+		vocab[wordid].dim = layer1_size;
 
-		// Randomize the grown weights
-		for (layer_index = dim; layer_index < vocab[wordid].dim; layer_index++) {
- 			next_random = next_random * (unsigned long long)25214903917 + 11;
- 			syn0[wordid * layer1_size + layer_index] = (((next_random & 0xFFFF) / (real)65536) - 0.5) / layer1_size;
-		}
-		return 1;
+	// Randomize the grown weights
+	for (layer_index = dim; layer_index < vocab[wordid].dim; layer_index++) {
+ 		next_random = next_random * (unsigned long long)25214903917 + 11;
+ 		syn0[wordid * layer1_size + layer_index] = (((next_random & 0xFFFF) / (real)65536) - 0.5) / layer1_size;
 	}
-	return 0;
+
+	return del_dim;
 }
 
 void InitUnigramTable() {
@@ -795,6 +794,8 @@ int main(int argc, char **argv) {
     printf("\t\tDecrease dropout probabilty based on increasing collection frequency\n");
     printf("\t\trdim-event <1/0> (default: 0)\n");
     printf("\t\tDecrease dropout probabilty based on increasing dimension\n");
+    printf("\t\t error-event <1/0> (default: 1)\n");
+    printf("\t\t Uses Multinoulli distribution only to grow dimension if error-event is 0\n");
     printf("\nExamples:\n");
     printf("./word2svec -train data.txt -output vec.txt -size 200 -window 5 -sample 1e-4 -negative 5 -hs 0 -cbow 1 -iter 3\n\n");
     return 0;
@@ -822,6 +823,7 @@ int main(int argc, char **argv) {
   if ((i = ArgPos((char *)"-iter", argc, argv)) > 0) iter = atoi(argv[i + 1]);
   if ((i = ArgPos((char *)"-min-count", argc, argv)) > 0) min_count = atoi(argv[i + 1]);
   if ((i = ArgPos((char *)"-classes", argc, argv)) > 0) classes = atoi(argv[i + 1]);
+  if ((i = ArgPos((char *)"-error-event", argc, argv)) > 0) useErrorNormToGrowDimension = atoi(argv[i + 1]);
   if ((i = ArgPos((char *)"-iter-event", argc, argv)) > 0) iter_event = atoi(argv[i + 1]);
   if ((i = ArgPos((char *)"-rdim-event", argc, argv)) > 0) remaining_dim_event = atoi(argv[i + 1]);
   if ((i = ArgPos((char *)"-cf-event", argc, argv)) > 0) freq_event = atoi(argv[i + 1]);
