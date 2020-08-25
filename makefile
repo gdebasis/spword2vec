@@ -1,12 +1,14 @@
 #set to the compiler of your system... use gcc-7 for MAC
-CC = gcc-7  
+CC = gcc  
 #Using -Ofast instead of -O3 might result in faster code, but is supported only by newer GCC versions
 CFLAGS = -lm -pthread -O3 -march=native -Wall -funroll-loops -Wno-unused-result
 
-all: node2vec word2vec word2svec distwordpairs
+all: node2vec word2vec word2svec distwordpairs bin2vec
 
+bin2vec : bin2vec.c
+	$(CC) bin2vec.c -o bin2vec $(CFLAGS)
 word2vec : word2vec.c
-	$(CC) word2vec.c -o wordsvec $(CFLAGS)
+	$(CC) word2vec.c -o word2vec $(CFLAGS)
 node2vec : node2vec.c
 	$(CC) node2vec.c -o node2vec $(CFLAGS)
 word2svec : word2svec.c

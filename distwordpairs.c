@@ -108,7 +108,7 @@ int main(int argc, char **argv) {
     a = 0;
     while (1) {
       vocab[b * max_w + a] = fgetc(f);
-      if (feof(f) || (vocab[b * max_w + a] == ' ')) break;
+      if (feof(f) || (vocab[b * max_w + a] == ' ' || vocab[b * max_w + a] == '\t')) break;
       if ((a < max_w) && (vocab[b * max_w + a] != '\n')) a++;
     }
     vocab[b * max_w + a] = 0;
@@ -206,7 +206,7 @@ int main(int argc, char **argv) {
 
 	for (i=0; i < numLines; i++) {
 		wp = &wp_list[i];
-		//printf("%s %s %f %f %d %d\n", wp->word1, wp->word2, wp->sim, wp->refsim, wp->pred_rank, wp->ref_rank);
+		printf("%s %s %f %f %d %d\n", wp->word1, wp->word2, wp->sim, wp->refsim, wp->pred_rank, wp->ref_rank);
 
 		sum_rank_ref += wp->ref_rank;
 		sum_rank_pred += wp->pred_rank;
