@@ -68,7 +68,7 @@ int main(int argc, char **argv) {
       fscanf(f, "%f", &M[a]);
 
     // consume the rest of the line...
-    while (fgetc(f)!='\n'); 
+    while (fgetc(f)!='\n') if (feof(f)) break; 
 
     if (LENGTH_NORMALIZE) { 
       len = 0;
@@ -81,6 +81,8 @@ int main(int argc, char **argv) {
 
     for (a = 0; a < size; a++) fwrite(&M[a], sizeof(float), 1, ovec);
     fprintf(ovec, "\n");
+
+    if (b%1000==0) printf("Written %lld words\n", b);
   }
   fclose(f);
   fclose(ovec);

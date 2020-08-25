@@ -659,6 +659,8 @@ void *TrainModelThread(void *id) {
 void TrainModel() {
   long a, b, c, d;
   FILE *fo, *fo2;
+  char* fmt;
+ 
   pthread_t *pt = (pthread_t *)malloc(num_threads * sizeof(pthread_t));
   printf("Starting training using file %s\n", train_file);
   starting_alpha = alpha;
@@ -681,7 +683,10 @@ void TrainModel() {
       fprintf(fo, "%s ", vocab[a].word);
       fprintf(fo2, "%s\t%lld\t%d\t", vocab[a].word, vocab[a].cn, vocab[a].dim);
 			for (b = 0; b < layer1_size; b++) fwrite(&syn0[a * layer1_size + b], sizeof(real), 1, fo);
-			for (b = 0; b < layer1_size; b++) fprintf(fo2, "%lf ", syn0[a * layer1_size + b]);
+			for (b = 0; b < layer1_size; b++) {
+        fmt = b==layer1_size-1? "%lf": "%lf ";
+        fprintf(fo2, fmt, syn0[a * layer1_size + b]);
+      }
       fprintf(fo, "\n");
       fprintf(fo2, "\n");
     }

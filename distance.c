@@ -61,6 +61,7 @@ int main(int argc, char **argv) {
     printf("Cannot allocate memory: %lld MB    %lld  %lld\n", (long long)words * size * sizeof(float) / 1048576, words, size);
     return -1;
   }
+
   for (b = 0; b < words; b++) {
     a = 0;
     while (1) {
@@ -71,10 +72,6 @@ int main(int argc, char **argv) {
     vocab[b * max_w + a] = 0;
     //printf("|%s|\n", &vocab[b*max_w]);
 
-		//+++DG
-    //for (a = 0; a < size; a++) fread(&M[a + b * size], sizeof(float), 1, f);
-		//---DG
-
     for (a = 0; a < size; a++) !vecmode?
 				fread(&M[a + b * size], sizeof(float), 1, f):
 				fscanf(f, "%f", &M[a + b * size]);
@@ -84,6 +81,8 @@ int main(int argc, char **argv) {
     len = sqrt(len);
     for (a = 0; a < size; a++) M[a + b * size] /= len;
   }
+  printf("Loaded %lld words\n", words);
+  
   fclose(f);
   while (1) {
     for (a = 0; a < N; a++) bestd[a] = 0;
