@@ -673,7 +673,7 @@ void TrainModel() {
   snprintf(output_file_vec, sizeof(output_file_vec), "%s.vec", output_file); 
   snprintf(output_file_bin, sizeof(output_file_bin), "%s.bin", output_file); 
   fo = fopen(output_file_bin, "wb");
-  fo2 = fopen(output_file_vec, "wb");
+  fo2 = fopen(output_file_vec, "w");
   if (classes == 0) {
     // Save the word vectors
     fprintf(fo, "%lld %d\n", vocab_size, layer1_size);

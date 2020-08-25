@@ -28,14 +28,15 @@ int main(int argc, char **argv) {
   long long words, size, a, b;
   float *M;
   if (argc < 3) {
-    printf("Usage: ./bin2vec <BINFILE> <VECFILE>");
+    printf("Usage: ./vec2bin <VECFILE> <BINFILE>");
     return 0;
   }
   strcpy(file_name, argv[1]);
   strcpy(ofile_name, argv[2]);
-  f = fopen(file_name, "rb");
+
+  f = fopen(file_name, "r");
   if (f == NULL) {
-    printf("Input file not found\n");
+    printf("Input file %s not found\n", file_name);
     return -1;
   }
   fscanf(f, "%lld", &words);
@@ -48,9 +49,9 @@ int main(int argc, char **argv) {
     return -1;
   }
 
-  ovec = fopen(ofile_name, "w");
+  ovec = fopen(ofile_name, "wb");
   if (ovec == NULL) {
-    printf("Couldn't open output file %s for writing\n", ofile_name);
+    printf("Couldn't open bin output file %s for writing\n", ofile_name);
     return -1;
   }
    
@@ -63,9 +64,13 @@ int main(int argc, char **argv) {
       if ((a < max_size) && (word[a] != '\n')) a++;
     }
     word[a] = 0;
-    for (a = 0; a < size; a++) fread(&M[a], sizeof(float), 1, f);
+    for (a = 0; a < size; a++)
+      fscanf(f, "%f", &M[a]);
 
-    if (LENGTH_NORMALIZE) {
+    // consume the rest of the line...
+    while (fgetc(f)!='\n'); 
+
+    if (LENGTH_NORMALIZE) { 
       len = 0;
       for (a = 0; a < size; a++) len += M[a] * M[a];
       len = sqrt(len);
@@ -74,7 +79,8 @@ int main(int argc, char **argv) {
 
     fprintf(ovec, "%s ", word);
 
-    for (a = 0; a < size; a++) if (a==size-1) fprintf(ovec, "%.4f\n", M[a]); else fprintf(ovec, "%.4f ", M[a]);
+    for (a = 0; a < size; a++) fwrite(&M[a], sizeof(float), 1, ovec);
+    fprintf(ovec, "\n");
   }
   fclose(f);
   fclose(ovec);
