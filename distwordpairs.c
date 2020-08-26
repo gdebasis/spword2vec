@@ -76,7 +76,7 @@ int main(int argc, char **argv) {
 	WordPair *wp;
 
   if (argc < 3) {
-    printf("Usage: ./distance <VECFILE> <WORDPAIR-LIST> \nwhere VECFILE contains word projections in the BINARY FORMAT and WORDPAIR-LIST contains a list of word pairs\n");
+    printf("Usage: ./distance <VECFILE> <WORDPAIR-LIST> \nwhere VECFILE contains word projections in the BINARY/VEC FORMAT and WORDPAIR-LIST contains a list of word pairs\n");
     return 0;
   }
 

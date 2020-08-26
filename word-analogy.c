@@ -39,6 +39,11 @@ int main(int argc, char **argv) {
   long long words, size, a, b, c, d, cn, bi[100];
   float *M;
   char *vocab;
+  char *gt;
+  int pAt1 = 0;
+  float mrr = 0;
+  int nRcds = 0;
+ 
   if (argc < 2) {
     printf("Usage: ./word-analogy <FILE>\nwhere FILE contains word projections in the BINARY FORMAT or VEC FORMAT\n");
     return 0;
@@ -123,7 +128,7 @@ int main(int argc, char **argv) {
       }
     }
     if (b == 0) continue;
-    printf("\n                                              Word              Distance\n------------------------------------------------------------------------\n");
+    printf("\n                                              Word              Similarity\n------------------------------------------------------------------------\n");
     for (a = 0; a < size; a++) vec[a] = M[a + bi[1] * size] - M[a + bi[0] * size] + M[a + bi[2] * size];
     len = 0;
     for (a = 0; a < size; a++) len += vec[a] * vec[a];
@@ -136,10 +141,11 @@ int main(int argc, char **argv) {
       if (c == bi[1]) continue;
       if (c == bi[2]) continue;
       a = 0;
-      for (b = 0; b < cn; b++) if (bi[b] == c) a = 1;
+      for (b = 0; b < 3; b++) if (bi[b] == c) a = 1;
       if (a == 1) continue;
       dist = 0;
       for (a = 0; a < size; a++) dist += vec[a] * M[a + c * size];
+
       for (a = 0; a < N; a++) {
         if (dist > bestd[a]) {
           for (d = N - 1; d > a; d--) {
@@ -153,6 +159,20 @@ int main(int argc, char **argv) {
       }
     }
     for (a = 0; a < N; a++) printf("%50s\t\t%f\n", bestw[a], bestd[a]);
+
+    // compute the MRR
+    // ground-truth is the last word
+    gt = &vocab[bi[3]*max_w];
+    for (a = 0; a < N; a++) { 
+        if (!strcmp(bestw[a], gt)) {
+          if (a==0)
+            pAt1++;
+          mrr += 1/(float)(a+1);
+        } 
+    }
+    nRcds++;
   }
+  printf("MRR = %.4f, P@1 = %.4f\n", mrr/(float)nRcds, pAt1/(float)nRcds);
+
   return 0;
 }
