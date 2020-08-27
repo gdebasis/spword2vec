@@ -3,8 +3,10 @@ CC = gcc
 #Using -Ofast instead of -O3 might result in faster code, but is supported only by newer GCC versions
 CFLAGS = -lm -pthread -O3 -march=native -Wall -funroll-loops -Wno-unused-result
 
-all: node2vec word2vec word2svec distwordpairs bin2vec vec2bin distance wordanalogy
+all: node2vec word2vec word2svec distwordpairs bin2vec vec2bin distance wordanalogy prune
 
+prune : prune.c
+	$(CC) prune.c -o prune $(CFLAGS)
 wordanalogy : word-analogy.c
 	$(CC) word-analogy.c -o wordanalogy $(CFLAGS)
 distance : distance.c
@@ -24,4 +26,4 @@ distwordpairs : distwordpairs.c
 	chmod +x *.sh
 
 clean:
-	rm -rf node2vec word2svec word2vec distwordpairs bin2vec vec2bin distance wordanalogy
+	rm -rf node2vec word2svec word2vec distwordpairs bin2vec vec2bin distance wordanalogy prune

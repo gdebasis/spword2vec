@@ -9,7 +9,7 @@ fi
 VECFILE=$1
 
 NLINES=`wc -l $VECFILE| awk '{print $1}'`
-DIM=`head -n1 $VECFILE | awk '{print NF}'`
+DIM=`head -n1 $VECFILE | awk '{print NF-1}'`
 
 #with header vec
 echo "$NLINES $DIM" > $VECFILE.wh.vec
