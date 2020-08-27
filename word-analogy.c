@@ -122,21 +122,21 @@ int main(int argc, char **argv) {
     }
     cn++;
     if (cn < 3) {
-      //printf("Only %lld words were entered.. three words are needed at the input to perform the calculation\n", cn);
+      printf("Only %lld words were entered.. three words are needed at the input to perform the calculation\n", cn);
       continue;
     }
     for (a = 0; a < cn; a++) {
       for (b = 0; b < words; b++) if (!strcmp(&vocab[b * max_w], st[a])) break;
       if (b == words) b = 0;
       bi[a] = b;
-      //printf("\nWord: %s  Position in vocabulary: %lld\n", st[a], bi[a]);
+      printf("\nWord: %s  Position in vocabulary: %lld\n", st[a], bi[a]);
       if (b == 0) {
-        //printf("Out of dictionary word!\n");
+        printf("Out of dictionary word!\n");
         break;
       }
     }
     if (b == 0) continue;
-    //printf("\n                                              Word              Similarity\n------------------------------------------------------------------------\n");
+    printf("\n                                              Word              Similarity\n------------------------------------------------------------------------\n");
     for (a = 0; a < size; a++) vec[a] = M[a + bi[1] * size] - M[a + bi[0] * size] + M[a + bi[2] * size];
     len = 0;
     for (a = 0; a < size; a++) len += vec[a] * vec[a];
@@ -166,7 +166,7 @@ int main(int argc, char **argv) {
         }
       }
     }
-    //for (a = 0; a < N; a++) printf("%50s\t\t%f\n", bestw[a], bestd[a]);
+    for (a = 0; a < N; a++) printf("%50s\t\t%f\n", bestw[a], bestd[a]);
 
     // compute the MRR
     // ground-truth is the last word
